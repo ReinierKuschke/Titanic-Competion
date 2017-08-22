@@ -1,0 +1,256 @@
+@@ -0,0 +1,256 @@
+# Reinier Kuschke
+# Titanic Prediction (Kaggle)
+# 22/08/2017
+
+# Load Data
+
+train <- read.csv('train.csv')
+test <- read.csv('test.csv')
+
+# Load Packages
+
+library(dplyr)
+library(ggplot2)
+library(Amelia)
+library(stringr)
+library(rpart)
+library(randomForest)
+
+#Check Data 
+### Train 
+
+head(train)
+str(train)
+
+### Test
+
+head(test)
+str(test)
+
+# Data Cleaning and Feature Engineering
+
+## Bind data for cleaning and feature engineeing
+
+test$Survived <- NA
+
+data <- rbind(train,test)
+
+
+data$Survived = as.factor(data$Survived)
+
+data$Pclass = as.factor(data$Pclass)
+
+train$Survived = as.factor(train$Survived)
+
+train$Pclass = as.factor(train$Pclass)
+
+### Check Missing
+
+missmap(data, main='missing map',col=c('red','green'),legend= FALSE)
+
+### Fare
+
+which(is.na(data$Fare))
+
+data$Fare[1044] <- median(data$Fare, na.rm=TRUE)
+
+
+### Family size
+
+data$FamilySize <- as.factor(c(data$SibSp + data$Parch + 1))
+
+
+### Normalise Titles
+
+fcn.title = function(name){
+  
+  if (str_detect(name, 'Mrs.') == TRUE){
+  
+      return ('Mrs.') 
+     }
+     
+    else if (str_detect(name, 'Mr.') == TRUE){
+        
+       return ('Mr.') 
+          }
+           
+     else if (str_detect(name, 'Miss.') == TRUE){
+            
+        return ('Miss.')
+               }
+              
+     else if (str_detect(name, 'Master.') == TRUE){
+                
+        return ('Master.')
+                   }
+                  
+   else { 
+      
+        return ('Other.')}
+}
+
+title <- numeric(nrow(data))
+
+              for (i in 1:nrow(data)){
+                
+                title[i] = fcn.title(as.character(data$Name[i]))
+                 
+                 }
+
+data$title = as.factor(title)
+
+fcn.other = function(name){
+  
+  full.name = unlist(str_split(name, ","))
+  
+  last.name = full.name[seq(2,length(full.name),2)]
+  
+  new.title = sapply(str_split(last.name, " "), "[", 2)
+  
+  return (new.title)
+}
+
+#### Identify other titles
+
+new.title = fcn.other(data$Name)
+            
+            unique(new.title)
+
+
+data[which(new.title %in% c('the', 'Dona.', 'Lady.')),]
+
+data[which(new.title %in% c('Mlle.', 'Ms.', 'Mme.')),]
+
+data[which(new.title %in% c('Jonkheer.', 'Don.', 'Sir.')),]
+
+data[which(new.title %in% c('Dr.')),]
+
+data[which(new.title %in% c('Rev.')),]
+
+data[which(new.title %in% c('Col.', 'Capt.', 'Major.')]
+           
+#### Assign to new titles
+
+'Mrs.' = new.title[new.title %in% c('Mme.', 'Mlle.', 'the', 'Dona.', 'Lady.', 'Ms.')]
+    
+'Mr.' = new.title[new.title %in% c('Jonkheer.', 'Don.', 'Sir.')]
+           
+'Officer.' = new.title[new.title %in% c('Col.', 'Capt.','Major.')]
+           
+        
+data$new.title = as.factor(new.title)
+
+
+### Age
+
+Agefit <- rpart(Age ~ Pclass + Sex + SibSp + Parch + Fare + new.title + Embarked + FamilySize,
+                data=data[!is.na(data$Age),], 
+                method="anova")
+
+data$Age[is.na(data$Age)] <- predict(Agefit, data[is.na(data$Age),])
+
+### Final Check
+
+missmap(data, main='missing map',col=c('red','green'),legend= FALSE)
+
+#Data Exploration
+
+## Sex Vs Surived
+
+SexVsSurvived <- data.frame(table(data$Sex, data$Survived))
+
+names(SexVsSurvived) <- c("Sex","Survived","Count")
+
+sexVsSurvivedPlot <- ggplot(SexVsSurvived, aes(x=Sex, y=Count, fill=Survived))+ geom_bar(stat = "identity")
+
+## Age Vs Survived
+
+AgeVsSurvived <- data.frame(Age=data$Age, Survived=data$Survived)
+
+AgeVsSurvivedPlot<- ggplot(AgeVsSurvived, aes(Age,fill = factor(Survived))) + geom_histogram()
+
+## Passenger Class Vs Survived
+
+PclassVsSurvived <- data.frame(table(data$Pclass, data$Survived))
+
+names(PclassVsSurvived) <- c("Pclass","Survived","Count")
+
+PclassVsSurvivedPlot <- ggplot(PclassVsSurvived, aes(x=Pclass, y=Count, fill=Survived))+ geom_bar(stat = "identity")
+
+## Family Size Vs Survived
+
+FamilySizeVsSurvived <- data.frame(table(data$FamilySize, data$Survived))
+
+names(FamilySizeVsSurvived) <- c("FamilySize","Survived","Count")
+
+FamilySizeVsSurvivedPlot <- ggplot(FamilySizeVsSurvived, aes(x=FamilySize, y=Count, fill=Survived)) + geom_bar(stat = "identity")
+
+## New Title Vs Survived
+
+new.titleVsSurvived <- data.frame(table(data$new.title, data$Survived))
+
+names(new.titleVsSurvived) <- c("new.title","Survived","Count")
+
+new.titleVsSurvivedPlot <- ggplot(new.titleVsSurvived, aes(x=new.title, y=Count, fill=Survived)) + geom_bar(stat = "identity")
+
+## Embarked Vs Survived
+
+EmbarkedVsSurvived <- data.frame(table(data$Embarked,data$Survived))
+
+names(EmbarkedVsSurvived) <- c("Embarked","Survived","Count")
+
+EmbarkedVsSurvivedPlot <- ggplot(EmbarkedVsSurvived,aes(x=Embarked,y=Count,fill=Survived)) + geom_bar(stat = "identity")
+
+
+#Model BUilding
+
+## Split Train andd Test Data
+
+data.train <- data[1:891,]
+
+data.test <- data[892:1309,]
+
+## Train Model
+
+features <- c('Pclass', 'FamilySize', 'new.title','Age','Embarked')
+
+input <- data[1:891,features]
+
+output <- train$Survived
+
+
+model <- randomForest(x=input, y=output, ntree = 100, importance = TRUE)
+model
+
+## Test Model
+
+target <- data[892:1309,features]
+
+pred <- predict(model, target)
+
+# Submission
+
+submit <- data.frame(PassengerId=rep(892:1309), Survived=pred)
+
+print(submit)
+
+write.csv(submit, "Kuschke.22082017.csv",row.names = FALSE)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
